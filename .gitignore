@@ -1,0 +1,40 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite
+*.db
+*.sqlite3
+database/optistock.db
+database/test_optistock.db
+
+# VS Code / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Streamlit
+.streamlit/
+
+# LangChain / LangGraph tracing
+*.trace
+langchain-debug.log
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/

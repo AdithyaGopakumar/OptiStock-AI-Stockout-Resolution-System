@@ -1,0 +1,1 @@
+"""Agent output contract models."""
