@@ -1,0 +1,228 @@
+{
+  "acceptance_scenarios": [
+    {
+      "scenario_id": "HEALTHY_STOCK",
+      "name": "Healthy stock - no action required",
+      "description": "Stock coverage comfortably exceeds target. System should return NO_ACTION and not call vendor tools.",
+      "condition": "Available units provide >20 days of coverage when target is 14 days",
+      "input": {
+        "sku": "AC-001",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "NO_ACTION",
+      "expected_behaviors": [
+        "get_stock_position called",
+        "get_sales_velocity called",
+        "calculate_stock_risk determines at_risk=false",
+        "list_vendor_offers NOT called",
+        "No purchase request created"
+      ]
+    },
+    {
+      "scenario_id": "MISSING_DATA",
+      "name": "Missing request data",
+      "description": "Warehouse or SKU is absent from request",
+      "condition": "SKU field is null or empty",
+      "input": {
+        "sku": null,
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "NEEDS_INFORMATION",
+      "expected_behaviors": [
+        "System asks for specific missing field",
+        "No database queries until data is provided",
+        "Clear error message points to 'sku' field"
+      ]
+    },
+    {
+      "scenario_id": "STALE_STOCK",
+      "name": "Stale inventory snapshot",
+      "description": "Inventory data is older than 2 days",
+      "condition": "Snapshot captured_at is more than 2 days old",
+      "input": {
+        "sku": "AC-002",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "BLOCKED",
+      "expected_error": "DATA_STALE",
+      "expected_behaviors": [
+        "get_stock_position succeeds",
+        "calculate_stock_risk flags stale=true",
+        "System blocks case with DATA_STALE",
+        "Recommends refreshing inventory snapshot"
+      ]
+    },
+    {
+      "scenario_id": "COST_VS_SPEED",
+      "name": "Cost versus speed trade-off",
+      "description": "Cheapest vendor arrives after stockout; costlier vendor arrives earlier",
+      "condition": "Multiple vendor options with different costs and lead times",
+      "input": {
+        "sku": "AC-003",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "AWAITING_APPROVAL",
+      "expected_behaviors": [
+        "build_vendor_options ranks options by cost",
+        "Proposal explains trade-off using tool evidence",
+        "Shows why faster vendor is recommended despite higher cost",
+        "Human can see both options with arrival dates"
+      ]
+    },
+    {
+      "scenario_id": "OVER_BUDGET",
+      "name": "Over-budget proposal",
+      "description": "Lowest-cost option exceeds remaining monthly budget",
+      "condition": "Total cost of cheapest eligible option > budget remaining",
+      "input": {
+        "sku": "AC-004",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "BLOCKED or AWAITING_APPROVAL",
+      "expected_behaviors": [
+        "Policy-guided review detects the over-budget concern",
+        "If normal path blocked, may offer higher-cost slower option",
+        "Proposal clearly marked with budget exception flag",
+        "No automatic write"
+      ]
+    },
+    {
+      "scenario_id": "INVALID_OUTPUT",
+      "name": "Invalid model output",
+      "description": "Agent omits required field in structured output",
+      "condition": "Agent returns incomplete Pydantic model",
+      "input": {
+        "sku": "AC-001",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "BLOCKED",
+      "expected_behaviors": [
+        "Pydantic validation fails on agent output",
+        "One repair attempt via prompt refinement",
+        "If still invalid, fail closed with BLOCKED status",
+        "Audit event logs validation failure"
+      ]
+    },
+    {
+      "scenario_id": "APPROVAL_DATA_CHANGE",
+      "name": "Approval data changes during pause",
+      "description": "Budget or vendor offer changes while waiting for human approval",
+      "condition": "Changes occur between approval request and revalidation",
+      "input": {
+        "sku": "AC-001",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "BLOCKED",
+      "expected_behaviors": [
+        "Approval pause succeeds",
+        "External system modifies budget or offer",
+        "revalidate_approved_proposal detects change",
+        "Old approval is invalidated",
+        "Case re-enters risk assessment with new facts"
+      ]
+    },
+    {
+      "scenario_id": "DUPLICATE_APPROVAL",
+      "name": "Duplicate approval handling",
+      "description": "Same approved proposal is resumed twice by mistake",
+      "condition": "Graph re-enters purchase request creation with same case_id and proposal_hash",
+      "input": {
+        "sku": "AC-001",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "PURCHASE_REQUEST_CREATED",
+      "expected_behaviors": [
+        "First approval creates purchase request",
+        "idempotency_key in database ensures uniqueness",
+        "Second approval returns existing request_id",
+        "Only one purchase_requests row exists",
+        "Audit shows both approval events"
+      ]
+    },
+    {
+      "scenario_id": "HUMAN_REJECTION",
+      "name": "Human rejection",
+      "description": "Approver selects REJECTED on proposal",
+      "condition": "approval_decision.decision == 'REJECTED'",
+      "input": {
+        "sku": "AC-001",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "BLOCKED or AWAITING_APPROVAL (after revision)",
+      "expected_behaviors": [
+        "Approval pause shows REJECTED option",
+        "Approver comment is captured",
+        "No purchase request created",
+        "Audit event logs REJECTED with approver_id and timestamp",
+        "Case can be revised and re-submitted"
+      ]
+    },
+    {
+      "scenario_id": "WRITE_FAILURE",
+      "name": "Database write failure",
+      "description": "purchase_requests table is locked or database error occurs",
+      "condition": "Database write raises exception",
+      "input": {
+        "sku": "AC-001",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "BLOCKED",
+      "expected_error": "WRITE_FAILED",
+      "expected_behaviors": [
+        "Revalidation passes",
+        "create_purchase_request attempts write",
+        "Exception is caught and error code returned",
+        "No partial data left in database",
+        "Audit event logs WRITE_FAILED",
+        "System does not claim success"
+      ]
+    },
+    {
+      "scenario_id": "INSUFFICIENT_SALES_HISTORY",
+      "name": "New SKU with insufficient sales history",
+      "description": "Product has < 3 observations in required time windows",
+      "condition": "Sales records < 3 for both 7-day and 30-day windows",
+      "input": {
+        "sku": "AC-005",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "NEEDS_INFORMATION or BLOCKED",
+      "expected_behaviors": [
+        "get_sales_velocity returns INSUFFICIENT_DATA",
+        "System blocks with clear message",
+        "Recommends manual input or waiting for more history",
+        "Shows how many observations exist"
+      ]
+    },
+    {
+      "scenario_id": "UNRELIABLE_VENDOR",
+      "name": "Unreliable vendor with expired offer",
+      "description": "Only vendor offer is from unreliable vendor or has expired",
+      "condition": "Vendor reliability < 0.90 OR offer valid_until < now",
+      "input": {
+        "sku": "AC-006",
+        "warehouse_id": "DEL-01",
+        "target_cover_days": 14
+      },
+      "expected_outcome": "BLOCKED",
+      "expected_behaviors": [
+        "list_vendor_offers excludes expired offer",
+        "get_vendor_performance shows unreliability",
+        "build_vendor_options has no eligible options",
+        "System blocks with BLOCKED status",
+        "Message explains vendor ineligibility"
+      ]
+    }
+  ]
+}

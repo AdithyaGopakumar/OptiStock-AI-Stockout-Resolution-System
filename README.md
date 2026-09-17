@@ -47,7 +47,7 @@ streamlit run app.py
 
 ## Running Tests
 
-The test suite covers all required acceptance scenarios plus failure paths. It uses mock LLM agents and tools so that tests are deterministic, fast, and cost nothing.
+The test suite covers all acceptance scenarios plus failure paths. It uses mock LLM agents and tools so that tests are deterministic, fast, and cost nothing.
 
 ```bash
 pytest tests/ -v
